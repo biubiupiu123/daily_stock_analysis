@@ -32,7 +32,7 @@ class TestParseImportFromBytesCsv:
         result = parse_import_from_bytes(data, "a.csv")
         assert len(result) == 2
         assert result[0] == ("600519", "贵州茅台", "medium")
-        assert result[1] == ("00700", "腾讯控股", "medium")
+        assert result[1] == ("HK00700", "腾讯控股", "medium")
 
     def test_parses_csv_chinese_column_names(self):
         data = "股票代码,股票名称\n600519,贵州茅台".encode("utf-8")
@@ -118,7 +118,7 @@ class TestParseImportFromBytesExcel:
         assert len(result) == 2, f"Expected 2 rows, got {len(result)} — first row may have been eaten as header"
         codes = [r[0] for r in result]
         assert "600519" in codes
-        assert "00700" in codes
+        assert "HK00700" in codes
 
     def test_rejects_xls(self):
         data = b"dummy"
@@ -183,21 +183,21 @@ class TestParseImportFromText:
         text = "00700\n600519"
         result = parse_import_from_text(text)
         assert len(result) == 2
-        assert result[0] == ("00700", None, "medium")
+        assert result[0] == ("HK00700", None, "medium")
         assert result[1] == ("600519", None, "medium")
 
     def test_parses_single_column_with_header(self):
         text = "code\n00700"
         result = parse_import_from_text(text)
         assert len(result) == 1
-        assert result[0] == ("00700", None, "medium")
+        assert result[0] == ("HK00700", None, "medium")
 
     def test_parses_space_separated_code_name_lines(self):
         text = "600519 贵州茅台\n00700 腾讯控股"
         result = parse_import_from_text(text)
         assert len(result) == 2
         assert result[0] == ("600519", "贵州茅台", "medium")
-        assert result[1] == ("00700", "腾讯控股", "medium")
+        assert result[1] == ("HK00700", "腾讯控股", "medium")
 
     def test_preserves_name_when_code_is_dirty(self):
         data = "code,name\nINVALID,贵州茅台".encode("utf-8")
