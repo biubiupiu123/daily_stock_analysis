@@ -98,6 +98,19 @@ class TestAugmentHistoricalWithRealtime(unittest.TestCase):
         quote = _make_realtime_quote(price=0)
         result = self.pipeline._augment_historical_with_realtime(df, quote, "600519")
         self.assertEqual(len(result), len(df))
+
+    def test_context_snapshot_records_market_source_and_price_basis(self) -> None:
+        snapshot = self.pipeline._build_context_snapshot(
+            enhanced_context={"code": "HK00700"},
+            news_content="news",
+            realtime_quote=_make_realtime_quote(),
+            chip_data=None,
+        )
+
+        self.assertEqual(snapshot["market"], "hk")
+        self.assertEqual(snapshot["quote_source"], "tencent")
+        self.assertEqual(snapshot["price_basis"], "realtime")
+        self.assertIn("captured_at", snapshot)
         quote2 = MagicMock()
         quote2.price = None
         result2 = self.pipeline._augment_historical_with_realtime(df, quote2, "600519")

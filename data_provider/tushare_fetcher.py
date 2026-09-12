@@ -143,12 +143,19 @@ class TushareFetcher(BaseFetcher):
         self._api: Optional[object] = None  # Tushare API 实例
         self.date_list: Optional[List[str]] = None  # 交易日列表缓存（倒序，最新日期在前）
         self._date_list_end: Optional[str] = None  # 缓存对应的截止日期，用于跨日刷新
+        self._hk_daily_permission_denied = False
 
         # 尝试初始化 API
         self._init_api()
 
         # 根据 API 初始化结果动态调整优先级
         self.priority = self._determine_priority()
+
+    def is_available_for_market(self, capability: str, market: str) -> bool:
+        """Return request-level availability without disabling A-share APIs."""
+        if capability == "daily_data" and market == "hk":
+            return self._api is not None and not self._hk_daily_permission_denied
+        return self._api is not None
     
     def _init_api(self) -> None:
         """
@@ -456,6 +463,8 @@ class TushareFetcher(BaseFetcher):
         self._check_rate_limit()
         
         is_hk = _is_hk_market(stock_code)
+        if is_hk and self._hk_daily_permission_denied:
+            raise DataFetchError("Tushare hk_daily 权限不可用，已在本进程中快速跳过")
          # 判断是否为 ETF / 港股，以选择不同接口
         is_etf = _is_etf_code(stock_code)
         if is_hk:
@@ -500,6 +509,14 @@ class TushareFetcher(BaseFetcher):
             
         except Exception as e:
             error_msg = str(e).lower()
+
+            if is_hk and any(
+                keyword in error_msg
+                for keyword in ["权限", "permission", "access denied", "not authorized"]
+            ):
+                self._hk_daily_permission_denied = True
+                logger.warning("Tushare hk_daily 权限不可用，本进程后续港股请求将直接降级")
+                raise DataFetchError("Tushare hk_daily 权限不可用") from e
             
             # 检测配额超限
             if any(keyword in error_msg for keyword in ['quota', '配额', 'limit', '权限']):
