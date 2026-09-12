@@ -104,7 +104,7 @@ class TestNormalizeCode:
         assert normalize_code("600519") == "600519"
 
     def test_plain_5_digit(self):
-        assert normalize_code("00700") == "00700"
+        assert normalize_code("00700") == "HK00700"
 
     def test_whitespace_stripped(self):
         assert normalize_code("  600519  ") == "600519"
@@ -126,13 +126,13 @@ class TestNormalizeCode:
         assert normalize_code("600000.SS") == "600000"
 
     def test_suffix_hk_strips(self):
-        assert normalize_code("00700.HK") == "00700"
+        assert normalize_code("00700.HK") == "HK00700"
 
     def test_suffix_hk_lowercase_strips(self):
-        assert normalize_code("00700.hk") == "00700"
+        assert normalize_code("00700.hk") == "HK00700"
 
     def test_suffix_hk_short_code_is_zero_padded(self):
-        assert normalize_code("1810.HK") == "01810"
+        assert normalize_code("1810.HK") == "HK01810"
 
     def test_suffix_hk_rejects_6_digit_base(self):
         assert normalize_code("600519.HK") is None
@@ -157,13 +157,13 @@ class TestNormalizeCode:
         assert normalize_code("BJ600519") is None
 
     def test_prefix_hk(self):
-        assert normalize_code("HK00700") == "00700"
+        assert normalize_code("HK00700") == "HK00700"
 
     def test_prefix_hk_lower(self):
-        assert normalize_code("hk00700") == "00700"
+        assert normalize_code("hk00700") == "HK00700"
 
     def test_prefix_hk_short_code_is_zero_padded(self):
-        assert normalize_code("HK700") == "00700"
+        assert normalize_code("HK700") == "HK00700"
 
     def test_prefix_hk_rejects_6_digit_base(self):
         assert normalize_code("HK600519") is None

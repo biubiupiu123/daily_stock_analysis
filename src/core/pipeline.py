@@ -25,7 +25,7 @@ import pandas as pd
 from src.config import FUNDAMENTAL_STAGE_TIMEOUT_SECONDS_DEFAULT, get_config, Config
 from src.storage import get_db
 from data_provider import DataFetcherManager
-from data_provider.base import normalize_stock_code
+from data_provider.base import detect_stock_market, normalize_stock_code
 from data_provider.realtime_types import ChipDistribution
 from src.analyzer import (
     GeminiAnalyzer,
@@ -47,7 +47,11 @@ from src.report_language import (
 from src.search_service import SearchService
 from src.services.social_sentiment_service import SocialSentimentService
 from src.enums import ReportType
-from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
+from src.stock_analyzer import (
+    StockTrendAnalyzer,
+    TrendAnalysisResult,
+    get_trend_market_profile,
+)
 from src.core.trading_calendar import (
     get_effective_trading_date,
     get_market_for_stock,
@@ -374,7 +378,14 @@ class StockAnalysisPipeline:
                     # Issue #234: Augment with realtime for intraday MA calculation
                     if self.config.enable_realtime_quote and realtime_quote:
                         df = self._augment_historical_with_realtime(df, realtime_quote, code)
-                    trend_result = self.trend_analyzer.analyze(df, code)
+                    trend_result = self.trend_analyzer.analyze(
+                        df,
+                        code,
+                        market_profile=get_trend_market_profile(
+                            code,
+                            bias_threshold=getattr(self.config, "bias_threshold", None),
+                        ),
+                    )
                     logger.info(f"{stock_name}({code}) 趋势分析: {trend_result.trend_status.value}, "
                               f"买入信号={trend_result.buy_signal.value}, 评分={trend_result.signal_score}")
             except Exception as e:
@@ -569,6 +580,13 @@ class StockAnalysisPipeline:
         """
         enhanced = context.copy()
         enhanced["report_language"] = normalize_report_language(getattr(self.config, "report_language", "zh"))
+        market_profile = get_trend_market_profile(
+            context.get("code", ""),
+            bias_threshold=getattr(self.config, "bias_threshold", None),
+        )
+        enhanced["market"] = market_profile.market
+        enhanced["currency"] = market_profile.currency
+        enhanced["trading_rules"] = market_profile.trading_rules
         
         # 添加股票名称
         if stock_name:
@@ -1557,10 +1575,25 @@ class StockAnalysisPipeline:
             "news_content": news_content,
             "realtime_quote_raw": self._safe_to_dict(realtime_quote),
             "chip_distribution_raw": self._safe_to_dict(chip_data),
+            "market": detect_stock_market(
+                str(enhanced_context.get("code", "")),
+                default="cn",
+            ),
+            "quote_source": self._realtime_source_name(realtime_quote),
+            "price_basis": "realtime" if realtime_quote is not None else "historical_close",
+            "captured_at": datetime.now(timezone.utc).isoformat(),
         }
         if self.analysis_skills is not None:
             snapshot["skills"] = list(self.analysis_skills)
         return snapshot
+
+    @staticmethod
+    def _realtime_source_name(realtime_quote: Any) -> Optional[str]:
+        if realtime_quote is None:
+            return None
+        source = getattr(realtime_quote, "source", None)
+        value = getattr(source, "value", source)
+        return str(value) if value is not None else None
 
     @staticmethod
     def _resolve_resume_target_date(

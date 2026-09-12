@@ -156,6 +156,20 @@ class TestTushareFetcherFetchRawData(unittest.TestCase):
             end_date="20260105",
         )
         fetcher._api.daily.assert_not_called()
+
+    def test_hk_permission_failure_disables_only_hk_daily_for_process(self) -> None:
+        fetcher = self._make_fetcher()
+        fetcher._api.hk_daily.side_effect = Exception("您没有访问该接口的权限")
+
+        with patch.object(fetcher, "_check_rate_limit"):
+            with self.assertRaisesRegex(DataFetchError, "hk_daily 权限不可用"):
+                fetcher._fetch_raw_data("HK00700", "2026-01-01", "2026-01-05")
+
+        self.assertFalse(fetcher.is_available_for_market("daily_data", "hk"))
+        self.assertTrue(fetcher.is_available_for_market("daily_data", "cn"))
+        with self.assertRaisesRegex(DataFetchError, "快速跳过"):
+            fetcher._fetch_raw_data("HK00700", "2026-01-01", "2026-01-05")
+        fetcher._api.hk_daily.assert_called_once()
         fetcher._api.fund_daily.assert_not_called()
 
     def test_fetch_raw_data_us_raises(self) -> None:

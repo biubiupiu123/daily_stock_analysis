@@ -43,7 +43,17 @@ from tenacity import (
 
 from src.patches.eastmoney_patch import eastmoney_patch
 from src.config import get_config
-from .base import BaseFetcher, DataFetchError, RateLimitError, STANDARD_COLUMNS, is_bse_code, is_st_stock, is_kc_cy_stock, normalize_stock_code
+from .base import (
+    BaseFetcher,
+    DataFetchError,
+    RateLimitError,
+    STANDARD_COLUMNS,
+    _is_hk_market,
+    is_bse_code,
+    is_kc_cy_stock,
+    is_st_stock,
+    normalize_stock_code,
+)
 from .realtime_types import (
     UnifiedRealtimeQuote, ChipDistribution, RealtimeSource,
     get_realtime_circuit_breaker, get_chip_circuit_breaker,
@@ -124,17 +134,7 @@ def _is_hk_code(stock_code: str) -> bool:
     Returns:
         True 表示是港股代码，False 表示不是港股代码
     """
-    # 去除可能的 'hk' 前缀并检查是否为纯数字
-    code = stock_code.strip().lower()
-    if code.endswith('.hk'):
-        numeric_part = code[:-3]
-        return numeric_part.isdigit() and 1 <= len(numeric_part) <= 5
-    if code.startswith('hk'):
-        # 带 hk 前缀的一定是港股，去掉前缀后应为纯数字（1-5位）
-        numeric_part = code[2:]
-        return numeric_part.isdigit() and 1 <= len(numeric_part) <= 5
-    # 无前缀时，5位纯数字才视为港股（避免误判 A 股代码）
-    return code.isdigit() and len(code) == 5
+    return _is_hk_market(stock_code)
 
 
 def _normalize_tencent_volume(fields: List[str]) -> Optional[int]:

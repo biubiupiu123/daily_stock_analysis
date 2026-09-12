@@ -18,6 +18,9 @@ if _orig_data_provider_base is None:
     base_mod = types.ModuleType("data_provider.base")
     base_mod.canonical_stock_code = lambda x: (x or "").strip().upper()
     base_mod.normalize_stock_code = lambda x: (x or "").strip().upper().removesuffix(".SH").removesuffix(".SZ")
+    base_mod.canonical_stock_identity = lambda x: base_mod.canonical_stock_code(
+        base_mod.normalize_stock_code(x)
+    )
     sys.modules["data_provider.base"] = base_mod
 
 if _orig_data_provider is None:

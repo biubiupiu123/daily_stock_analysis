@@ -2270,17 +2270,9 @@ class SearchService:
     @staticmethod
     def _is_foreign_stock(stock_code: str) -> bool:
         """判断是否为港股或美股"""
-        code = stock_code.strip()
-        # 美股：1-5个大写字母，可能包含点（如 BRK.B）
-        if SearchService._US_STOCK_RE.match(code):
-            return True
-        # 港股：带 hk 前缀或 5位纯数字
-        lower = code.lower()
-        if lower.startswith('hk'):
-            return True
-        if code.isdigit() and len(code) == 5:
-            return True
-        return False
+        from data_provider.base import detect_stock_market
+
+        return detect_stock_market(stock_code, default="cn") in {"hk", "us"}
 
     @classmethod
     def _contains_chinese_text(cls, value: Optional[str]) -> bool:
@@ -3438,10 +3430,61 @@ class SearchService:
         results = {}
         search_count = 0
 
+        from data_provider.base import detect_stock_market
+
+        market = detect_stock_market(stock_code, default="cn")
         is_foreign = self._is_foreign_stock(stock_code)
         is_index_etf = self.is_index_or_etf(stock_code, stock_name)
 
-        if is_foreign:
+        if market == "hk":
+            search_dimensions = [
+                {
+                    'name': 'latest_news',
+                    'query': f"{stock_name} {stock_code} 港股 latest news 重大事件",
+                    'desc': '最新消息',
+                    'tavily_topic': 'news',
+                    'strict_freshness': True,
+                },
+                {
+                    'name': 'announcements',
+                    'query': (
+                        f"{stock_name} {stock_code} HKEX announcement disclosure "
+                        "港交所 披露易 公告 财报 site:hkexnews.hk"
+                    ),
+                    'desc': '港交所披露',
+                    'tavily_topic': 'news',
+                    'strict_freshness': True,
+                },
+                {
+                    'name': 'market_analysis',
+                    'query': f"{stock_name} {stock_code} 港股 券商研报 analyst rating target price",
+                    'desc': '机构分析',
+                    'tavily_topic': None,
+                    'strict_freshness': False,
+                },
+                {
+                    'name': 'risk_check',
+                    'query': f"{stock_name} {stock_code} 配售 减持 诉讼 风险 suspension placing",
+                    'desc': '风险排查',
+                    'tavily_topic': 'news',
+                    'strict_freshness': True,
+                },
+                {
+                    'name': 'earnings',
+                    'query': f"{stock_name} {stock_code} 业绩 财报 revenue profit dividend results",
+                    'desc': '业绩预期',
+                    'tavily_topic': None,
+                    'strict_freshness': False,
+                },
+                {
+                    'name': 'industry',
+                    'query': f"{stock_name} {stock_code} 行业 竞争对手 market share outlook",
+                    'desc': '行业分析',
+                    'tavily_topic': None,
+                    'strict_freshness': False,
+                },
+            ]
+        elif is_foreign:
             search_dimensions = [
                 {
                     'name': 'latest_news',

@@ -114,6 +114,11 @@ def normalize_stock_code(stock_code: str) -> str:
         if suffix.upper() in ('SH', 'SZ', 'SS', 'BJ') and base.isdigit():
             return base
 
+    # A-shares use six digits; an unprefixed five-digit code is the
+    # documented shorthand for a Hong Kong listing.
+    if upper.isdigit() and len(upper) == 5:
+        return f"HK{upper}"
+
     return code
 
 
@@ -144,6 +149,30 @@ def _is_hk_market(code: str) -> bool:
     if normalized.isdigit() and len(normalized) == 5:
         return True
     return False
+
+
+def is_hk_stock_code(code: str) -> bool:
+    """Public market-identity check for Hong Kong stock codes."""
+    return _is_hk_market(code)
+
+
+def detect_stock_market(code: str, *, default: Optional[str] = "cn") -> Optional[str]:
+    """Return the canonical market tag for a stock code.
+
+    ``default`` keeps legacy fail-open callers compatible. Pass ``None`` at
+    validation boundaries when an unrecognised code must stay unclassified.
+    """
+    normalized = (code or "").strip()
+    if not normalized:
+        return default
+    if _is_us_market(normalized):
+        return "us"
+    if _is_hk_market(normalized):
+        return "hk"
+    canonical = normalize_stock_code(normalized)
+    if canonical.isdigit() and len(canonical) == 6:
+        return "cn"
+    return default
 
 
 def _is_etf_code(code: str) -> bool:
@@ -187,11 +216,7 @@ def _is_meaningful_chip_distribution(chip: Any) -> bool:
 
 def _market_tag(code: str) -> str:
     """返回市场标签: cn/us/hk."""
-    if _is_us_market(code):
-        return "us"
-    if _is_hk_market(code):
-        return "hk"
-    return "cn"
+    return detect_stock_market(code, default="cn") or "cn"
 
 
 def is_bse_code(code: str) -> bool:
@@ -250,6 +275,15 @@ def canonical_stock_code(code: str) -> str:
         'hk00700' -> 'HK00700'
     """
     return (code or "").strip().upper()
+
+
+def canonical_stock_identity(code: str) -> str:
+    """Return the stable internal identity used for new tasks and records.
+
+    Exchange-decorated A-share codes are reduced to six digits while Hong
+    Kong codes use the unambiguous ``HK`` plus five-digit representation.
+    """
+    return canonical_stock_code(normalize_stock_code(code))
 
 
 class DataFetchError(Exception):
@@ -556,6 +590,10 @@ class DataFetcherManager:
         "FinnhubFetcher": {"us"},
         "AlphaVantageFetcher": {"us"},
     }
+    _HK_REALTIME_SOURCES = {
+        "longbridge": ("LongbridgeFetcher", {}),
+        "akshare_hk": ("AkshareFetcher", {"source": "hk"}),
+    }
     
     def __init__(self, fetchers: Optional[List[BaseFetcher]] = None):
         """
@@ -720,6 +758,39 @@ class DataFetcherManager:
                 ", ".join(skipped),
             )
 
+        return kept
+
+    @classmethod
+    def _filter_fetchers_for_market_capability(
+        cls,
+        fetchers: List[BaseFetcher],
+        capability: str,
+        market: str,
+    ) -> List[BaseFetcher]:
+        """Skip providers that disabled one capability for a specific market."""
+        kept: List[BaseFetcher] = []
+        for fetcher in fetchers:
+            probe = getattr(fetcher, "is_available_for_market", None)
+            if not callable(probe):
+                kept.append(fetcher)
+                continue
+            try:
+                if probe(capability, market):
+                    kept.append(fetcher)
+                else:
+                    logger.info(
+                        "[数据源路由] %s 跳过 %s（%s 暂不可用）",
+                        market,
+                        fetcher.name,
+                        capability,
+                    )
+            except Exception as exc:
+                logger.debug(
+                    "[数据源可用性] %s 市场能力检查失败: %s",
+                    fetcher.name,
+                    exc,
+                )
+                kept.append(fetcher)
         return kept
 
     def _get_cached_stock_name(self, stock_code: str) -> Optional[str]:
@@ -1154,6 +1225,11 @@ class DataFetcherManager:
         is_hk = (not is_us) and _is_hk_market(stock_code)
         if is_hk:
             fetchers = self._filter_daily_fetchers_for_market(fetchers, "hk")
+            fetchers = self._filter_fetchers_for_market_capability(
+                fetchers,
+                capability="daily_data",
+                market="hk",
+            )
         fetchers = self._filter_fetchers_by_capability(fetchers, capability="daily_data")
         total_fetchers = len(fetchers)
 
@@ -1388,20 +1464,52 @@ class DataFetcherManager:
         is_us = is_us_index or _is_us_code(stock_code)
         is_hk = (not is_us) and _is_hk_market(stock_code)
 
-        if is_us or is_hk:
+        if is_hk:
+            configured_sources = getattr(
+                config,
+                "hk_realtime_source_priority",
+                "longbridge,akshare_hk",
+            )
+            source_order = self._resolve_hk_realtime_sources(configured_sources)
+            primary_quote = None
+            for source in source_order:
+                fetcher_name, source_kwargs = self._HK_REALTIME_SOURCES[source]
+                if primary_quote is None:
+                    primary_quote = self._try_fetcher_quote(
+                        stock_code,
+                        fetcher_name,
+                        **source_kwargs,
+                    )
+                    if primary_quote is not None:
+                        logger.info(
+                            "[实时行情] 港股 %s 成功获取 (来源: %s)",
+                            stock_code,
+                            source,
+                        )
+                else:
+                    primary_quote = self._supplement_quote(
+                        stock_code,
+                        primary_quote,
+                        fetcher_name,
+                        **source_kwargs,
+                    )
+            if primary_quote is not None:
+                return primary_quote
+            if log_final_failure:
+                logger.info(
+                    "[实时行情] 港股 %s 无可用数据源 (尝试顺序: %s)",
+                    stock_code,
+                    ",".join(source_order),
+                )
+            return None
+
+        if is_us:
             prefer_lb = self._longbridge_preferred() and not is_us_index
-            if is_us:
-                primary_src = "LongbridgeFetcher" if prefer_lb else "YfinanceFetcher"
-                secondary_src = "YfinanceFetcher" if prefer_lb else "LongbridgeFetcher"
-                market_label = "美股指数" if is_us_index else "美股"
-                primary_kw: dict = {}
-                secondary_kw: dict = {}
-            else:
-                primary_src = "LongbridgeFetcher" if prefer_lb else "AkshareFetcher"
-                secondary_src = "AkshareFetcher" if prefer_lb else "LongbridgeFetcher"
-                market_label = "港股"
-                primary_kw = {"source": "hk"} if primary_src == "AkshareFetcher" else {}
-                secondary_kw = {"source": "hk"} if secondary_src == "AkshareFetcher" else {}
+            primary_src = "LongbridgeFetcher" if prefer_lb else "YfinanceFetcher"
+            secondary_src = "YfinanceFetcher" if prefer_lb else "LongbridgeFetcher"
+            market_label = "美股指数" if is_us_index else "美股"
+            primary_kw: dict = {}
+            secondary_kw: dict = {}
 
             primary_quote = self._try_fetcher_quote(stock_code, primary_src, **primary_kw)
             if primary_quote is not None:
@@ -1503,6 +1611,29 @@ class DataFetcherManager:
 
         return None
 
+    @classmethod
+    def _resolve_hk_realtime_sources(cls, configured: str) -> List[str]:
+        """Validate and de-duplicate the configured HK realtime source order."""
+        resolved: List[str] = []
+        unknown: List[str] = []
+        for raw_source in (configured or "").split(","):
+            source = raw_source.strip().lower()
+            if not source:
+                continue
+            if source not in cls._HK_REALTIME_SOURCES:
+                unknown.append(source)
+                continue
+            if source not in resolved:
+                resolved.append(source)
+        if unknown:
+            logger.warning(
+                "[数据源路由] 忽略未知港股实时源: %s",
+                ", ".join(unknown),
+            )
+        if not resolved:
+            return ["longbridge", "akshare_hk"]
+        return resolved
+
     # Fields worth supplementing from secondary sources when the primary
     # source returns None for them. Ordered by importance.
     _SUPPLEMENT_FIELDS = [
@@ -1547,15 +1678,44 @@ class DataFetcherManager:
 
     def _try_fetcher_quote(self, stock_code: str, fetcher_name: str, **kw):
         """Try to get a realtime quote from a named fetcher; returns quote or None."""
+        started_at = time.perf_counter()
         fetcher = self._get_fetcher_by_name(fetcher_name, capability="realtime_quote")
         if fetcher is None or not hasattr(fetcher, 'get_realtime_quote'):
+            logger.debug(
+                "[实时行情路由] code=%s source=%s status=skipped",
+                stock_code,
+                fetcher_name,
+            )
             return None
         try:
             q = self._call_fetcher_method(fetcher, 'get_realtime_quote', stock_code, **kw)
             if q is not None and q.has_basic_data():
+                logger.info(
+                    "[实时行情路由] code=%s market=%s source=%s status=success elapsed_ms=%.1f",
+                    stock_code,
+                    _market_tag(stock_code),
+                    fetcher_name,
+                    (time.perf_counter() - started_at) * 1000,
+                )
                 return q
         except Exception as e:
-            logger.debug(f"[实时行情] {stock_code} {fetcher_name} 获取失败: {e}")
+            error_type, _ = summarize_exception(e)
+            logger.info(
+                "[实时行情路由] code=%s market=%s source=%s status=failed error_type=%s elapsed_ms=%.1f",
+                stock_code,
+                _market_tag(stock_code),
+                fetcher_name,
+                error_type,
+                (time.perf_counter() - started_at) * 1000,
+            )
+            return None
+        logger.info(
+            "[实时行情路由] code=%s market=%s source=%s status=empty elapsed_ms=%.1f",
+            stock_code,
+            _market_tag(stock_code),
+            fetcher_name,
+            (time.perf_counter() - started_at) * 1000,
+        )
         return None
 
     def _supplement_quote(self, stock_code: str, primary_quote, fetcher_name: str, **kw):

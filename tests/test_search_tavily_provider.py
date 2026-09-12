@@ -206,6 +206,36 @@ class TestTavilySearchProvider(unittest.TestCase):
         self.assertEqual(_FakeTavilyClient.search_calls[0]["topic"], "news")
         self.assertNotIn("topic", _FakeTavilyClient.search_calls[1])
 
+    def test_hk_intel_prioritizes_hkex_disclosures(self) -> None:
+        published_text = datetime.now(timezone.utc).replace(
+            microsecond=0
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with self._patch_tavily(
+            {
+                "results": [
+                    {
+                        "title": "Tencent disclosure",
+                        "url": "https://www.hkexnews.hk/example",
+                        "content": "HKEX filing",
+                        "published_date": published_text,
+                    }
+                ]
+            }
+        ):
+            service = SearchService(
+                tavily_keys=["dummy_key"],
+                searxng_public_instances_enabled=False,
+            )
+            intel = service.search_comprehensive_intel(
+                "HK00700",
+                "腾讯控股",
+                max_searches=2,
+            )
+
+        self.assertEqual(list(intel), ["latest_news", "announcements"])
+        self.assertIn("site:hkexnews.hk", _FakeTavilyClient.search_calls[1]["query"])
+        self.assertEqual(_FakeTavilyClient.search_calls[1]["topic"], "news")
+
     def test_search_comprehensive_intel_etf_risk_check_does_not_force_news_topic(self) -> None:
         published_dt = datetime.now(timezone.utc).replace(microsecond=0)
         published_text = published_dt.strftime("%Y-%m-%dT%H:%M:%SZ")

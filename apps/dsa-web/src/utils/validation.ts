@@ -25,21 +25,39 @@ export const looksLikeStockCode = (value: string): boolean => {
 };
 
 /**
+ * Mirror the backend's stable identity shape at the submission boundary.
+ * The backend remains authoritative; this only prevents duplicate UI forms.
+ */
+export const canonicalizeStockCode = (value: string): string => {
+  const normalized = value.trim().toUpperCase();
+  const hkPrefix = normalized.match(/^HK(\d{1,5})$/);
+  const hkSuffix = normalized.match(/^(\d{1,5})\.HK$/);
+  const hkDigits = hkPrefix?.[1] ?? hkSuffix?.[1] ?? (/^\d{5}$/.test(normalized) ? normalized : undefined);
+  if (hkDigits) {
+    return `HK${hkDigits.padStart(5, '0')}`;
+  }
+
+  const aPrefix = normalized.match(/^(?:SH|SZ|BJ)(\d{6})$/);
+  const aSuffix = normalized.match(/^(\d{6})\.(?:SH|SZ|SS|BJ)$/);
+  return aPrefix?.[1] ?? aSuffix?.[1] ?? normalized;
+};
+
+/**
  * Validate common A-share, HK, and US stock code formats.
  */
 export const validateStockCode = (value: string): ValidationResult => {
-  const normalized = value.trim().toUpperCase();
+  const normalizedInput = value.trim().toUpperCase();
 
-  if (!normalized) {
-    return { valid: false, message: '请输入股票代码', normalized };
+  if (!normalizedInput) {
+    return { valid: false, message: '请输入股票代码', normalized: normalizedInput };
   }
 
-  const valid = looksLikeStockCode(normalized);
+  const valid = looksLikeStockCode(normalizedInput);
 
   return {
     valid,
     message: valid ? undefined : '股票代码格式不正确',
-    normalized,
+    normalized: valid ? canonicalizeStockCode(normalizedInput) : normalizedInput,
   };
 };
 

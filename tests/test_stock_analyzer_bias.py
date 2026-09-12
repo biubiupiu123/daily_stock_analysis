@@ -14,6 +14,7 @@ from src.stock_analyzer import (
     VolumeStatus,
     MACDStatus,
     RSIStatus,
+    get_trend_market_profile,
 )
 
 
@@ -71,6 +72,19 @@ class StockAnalyzerBiasTestCase(unittest.TestCase):
             any(substring in s for s in items),
             msg=f"Did not expect substring '{substring}' in {items}",
         )
+
+    @patch("src.stock_analyzer.get_config")
+    def test_hk_market_profile_keeps_threshold_configurable(
+        self, mock_get_config: MagicMock
+    ) -> None:
+        mock_get_config.return_value.bias_threshold = 5.0
+
+        profile = get_trend_market_profile("00700.HK")
+
+        self.assertEqual(profile.market, "hk")
+        self.assertEqual(profile.currency, "HKD")
+        self.assertIn("T+0", profile.trading_rules)
+        self.assertEqual(profile.bias_threshold, 5.0)
 
     @patch("src.stock_analyzer.get_config")
     def test_bias_nan_defense(self, mock_get_config: MagicMock) -> None:

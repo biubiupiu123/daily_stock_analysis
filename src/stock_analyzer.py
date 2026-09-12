@@ -25,6 +25,7 @@ import pandas as pd
 import numpy as np
 
 from src.config import get_config
+from data_provider.base import detect_stock_market
 
 logger = logging.getLogger(__name__)
 
@@ -79,10 +80,47 @@ class RSIStatus(Enum):
     OVERSOLD = "超卖"         # RSI < 30
 
 
+@dataclass(frozen=True)
+class TrendMarketProfile:
+    """Market semantics passed explicitly into technical signal generation."""
+
+    market: str
+    currency: str
+    trading_rules: str
+    bias_threshold: float
+
+
+def get_trend_market_profile(
+    code: str,
+    *,
+    bias_threshold: float | None = None,
+) -> TrendMarketProfile:
+    market = detect_stock_market(code, default="cn") or "cn"
+    semantics = {
+        "cn": ("CNY", "T+1；存在涨跌停限制"),
+        "hk": ("HKD", "T+0；无日涨跌停限制"),
+        "us": ("USD", "T+0；存在市场熔断机制"),
+    }
+    currency, trading_rules = semantics.get(market, semantics["cn"])
+    return TrendMarketProfile(
+        market=market,
+        currency=currency,
+        trading_rules=trading_rules,
+        bias_threshold=(
+            float(bias_threshold)
+            if bias_threshold is not None
+            else get_config().bias_threshold
+        ),
+    )
+
+
 @dataclass
 class TrendAnalysisResult:
     """趋势分析结果"""
     code: str
+    market: str = "cn"
+    currency: str = "CNY"
+    trading_rules: str = "T+1；存在涨跌停限制"
     
     # 趋势判断
     trend_status: TrendStatus = TrendStatus.CONSOLIDATION
@@ -135,6 +173,9 @@ class TrendAnalysisResult:
     def to_dict(self) -> Dict[str, Any]:
         return {
             'code': self.code,
+            'market': self.market,
+            'currency': self.currency,
+            'trading_rules': self.trading_rules,
             'trend_status': self.trend_status.value,
             'ma_alignment': self.ma_alignment,
             'trend_strength': self.trend_strength,
@@ -202,7 +243,12 @@ class StockTrendAnalyzer:
         """初始化分析器"""
         pass
     
-    def analyze(self, df: pd.DataFrame, code: str) -> TrendAnalysisResult:
+    def analyze(
+        self,
+        df: pd.DataFrame,
+        code: str,
+        market_profile: TrendMarketProfile | None = None,
+    ) -> TrendAnalysisResult:
         """
         分析股票趋势
         
@@ -213,7 +259,13 @@ class StockTrendAnalyzer:
         Returns:
             TrendAnalysisResult 分析结果
         """
-        result = TrendAnalysisResult(code=code)
+        profile = market_profile or get_trend_market_profile(code)
+        result = TrendAnalysisResult(
+            code=code,
+            market=profile.market,
+            currency=profile.currency,
+            trading_rules=profile.trading_rules,
+        )
         
         if df is None or df.empty or len(df) < 20:
             logger.warning(f"{code} 数据不足，无法进行趋势分析")
@@ -257,7 +309,7 @@ class StockTrendAnalyzer:
         self._analyze_rsi(df, result)
 
         # 7. 生成买入信号
-        self._generate_signal(result)
+        self._generate_signal(result, market_profile=profile)
 
         return result
     
@@ -581,7 +633,11 @@ class StockTrendAnalyzer:
             result.rsi_status = RSIStatus.OVERSOLD
             result.rsi_signal = f"⭐ RSI超卖({rsi_mid:.1f}<30)，反弹机会大"
 
-    def _generate_signal(self, result: TrendAnalysisResult) -> None:
+    def _generate_signal(
+        self,
+        result: TrendAnalysisResult,
+        market_profile: TrendMarketProfile | None = None,
+    ) -> None:
         """
         生成买入信号
 
@@ -619,7 +675,8 @@ class StockTrendAnalyzer:
         bias = result.bias_ma5
         if bias != bias or bias is None:  # NaN or None defense
             bias = 0.0
-        base_threshold = get_config().bias_threshold
+        profile = market_profile or get_trend_market_profile(result.code)
+        base_threshold = profile.bias_threshold
 
         # Strong trend compensation: relax threshold for STRONG_BULL with high strength
         trend_strength = result.trend_strength if result.trend_strength == result.trend_strength else 0.0

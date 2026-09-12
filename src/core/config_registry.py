@@ -464,6 +464,32 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "warning_codes": ["provider_priority_order"],
     },
+    "HK_REALTIME_SOURCE_PRIORITY": {
+        "title": "Hong Kong Realtime Source Priority",
+        "description": "Comma-separated priority for Hong Kong realtime quotes. Unconfigured or cooling providers are skipped automatically.",
+        "category": "data_source",
+        "data_type": "string",
+        "ui_control": "text",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "longbridge,akshare_hk",
+        "options": [],
+        "validation": {},
+        "display_order": 21,
+        "help_key": "settings.data_source.HK_REALTIME_SOURCE_PRIORITY",
+        "examples": [
+            "HK_REALTIME_SOURCE_PRIORITY=longbridge,akshare_hk",
+            "HK_REALTIME_SOURCE_PRIORITY=akshare_hk,longbridge",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：数据源配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#数据源配置",
+            },
+        ],
+        "warning_codes": ["provider_priority_order"],
+    },
     "ENABLE_REALTIME_TECHNICAL_INDICATORS": {
         "title": "Realtime Technical Indicators",
         "description": "Use intraday realtime price for MA5/MA10/MA20 and trend analysis (Issue #234). Disable to use yesterday close.",
@@ -476,7 +502,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "default_value": "true",
         "options": [],
         "validation": {},
-        "display_order": 21,
+        "display_order": 22,
         "help_key": "settings.data_source.realtime_quotes",
         "examples": [
             "ENABLE_REALTIME_TECHNICAL_INDICATORS=true",

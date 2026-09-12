@@ -173,7 +173,7 @@ daily_stock_analysis/
 > **Longbridge 运行时行为：** 未配置凭据时不会实例化 Longbridge 这个可选 fetcher；若运行时遇到 `client is closed`、`context closed`、`connection closed` 等连接关闭类异常，会进入冷却期（默认 15 秒，可用 `LONGBRIDGE_CONNECTION_COOLDOWN_SECONDS` 调整），冷却期内美股/港股的实时与日线请求会自动跳过 Longbridge，退回 YFinance / AkShare 等兜底链路。
 
 > 补充说明
-- TUSHARE_TOKEN，当此参数配置后，但不具备港股日线接口权限时，也会出现港股数据查询不出来或者错误的情况，和老版本提示不支持港股效果相同
+- 配置 `TUSHARE_TOKEN` 但账号不具备港股 `hk_daily` 权限时，首次权限错误会触发当前进程内的港股快速降级；后续直接使用 AkShare/YFinance 等来源，A 股 Tushare 能力不受影响。
 
 #### ✅ 最小配置示例
 
@@ -356,6 +356,7 @@ daily_stock_analysis/
 | `ENABLE_CHIP_DISTRIBUTION` | 启用筹码分布分析（该接口不稳定，云端部署建议关闭）。GitHub Actions 用户需在 Repository Variables 中设置 `ENABLE_CHIP_DISTRIBUTION=true` 方可启用；workflow 默认关闭。 | `true` | 可选 |
 | `ENABLE_EASTMONEY_PATCH` | 东财接口补丁：东财接口频繁失败（如 RemoteDisconnected、连接被关闭）时建议设为 `true`，注入 NID 令牌与随机 User-Agent 以降低被限流概率 | `false` | 可选 |
 | `REALTIME_SOURCE_PRIORITY` | 实时行情数据源优先级（逗号分隔），如 `tencent,akshare_sina,efinance,akshare_em` | 见 .env.example | 可选 |
+| `HK_REALTIME_SOURCE_PRIORITY` | 港股实时行情独立优先级；支持 `longbridge`、`akshare_hk`，不可用源自动跳过 | `longbridge,akshare_hk` | 可选 |
 | `ENABLE_FUNDAMENTAL_PIPELINE` | 基本面聚合总开关；关闭时仅返回 `not_supported` 块，不改变原分析链路 | `true` | 可选 |
 | `FUNDAMENTAL_STAGE_TIMEOUT_SECONDS` | 基本面阶段总时延预算（秒） | `8.0` | 可选 |
 | `FUNDAMENTAL_FETCH_TIMEOUT_SECONDS` | 单能力源调用超时（秒） | `3.0` | 可选 |
@@ -960,6 +961,8 @@ PUSHOVER_API_TOKEN=your_api_token
 - 需要注册获取 Token
 - 更稳定，数据更全
 - 设置 `TUSHARE_TOKEN`
+- A 股日线/实时与港股日线可作为增强源；港股日线需要账号具备 `hk_daily` 权限
+- `hk_daily` 明确返回权限错误后，当前进程会直接跳过后续港股调用并降级到免费源，不影响 A 股接口
 
 ### Baostock
 - 免费，无需配置
@@ -971,14 +974,25 @@ PUSHOVER_API_TOKEN=your_api_token
 - 美股历史数据与实时行情均统一使用 YFinance，以避免 akshare 美股复权异常导致的技术指标错误
 
 ### Longbridge（长桥）
-- 美股/港股数据兜底，补充 YFinance 缺失的量比、换手率、PE 等字段
+- 美股/港股可选增强源，可作为实时主源或补充缺失的量比、换手率、PE 等字段
 - 需从 [open.longbridge.com](https://open.longbridge.com/) 注册并获取 App Key / App Secret / Access Token
 - 设置 `LONGBRIDGE_APP_KEY`、`LONGBRIDGE_APP_SECRET`、`LONGBRIDGE_ACCESS_TOKEN`
 - 可选设置 `LONGBRIDGE_CONNECTION_COOLDOWN_SECONDS` 控制连接关闭类异常后的冷却秒数（默认 15）
 - 接入点可配 `LONGBRIDGE_HTTP_URL`、`LONGBRIDGE_QUOTE_WS_URL`、`LONGBRIDGE_TRADE_WS_URL`、`LONGBRIDGE_REGION`
 - 其余可选参数见官方 [环境变量说明](https://open.longbridge.com/zh-CN/docs/getting-started#环境变量)
-- 仅在 YFinance（美股）或 AkShare（港股）返回数据不完整时自动触发，不影响 A 股链路
+- 港股实时顺序由 `HK_REALTIME_SOURCE_PRIORITY` 控制，默认 `longbridge,akshare_hk`；改为 `akshare_hk,longbridge` 可让免费源优先
 - 未配置凭据时不会实例化该可选数据源；若运行时出现连接关闭类异常，会在冷却期内临时跳过 Longbridge，避免请求级频繁重连
+
+### A 股 / 港股推荐路由
+
+| 市场与能力 | 无密钥默认链 | 可选增强 | 最终降级 |
+|---|---|---|---|
+| A 股日线 | Efinance → AkShare → Pytdx → Baostock → YFinance | Tushare（配置 Token 后参与优先级） | 保留数据库已有历史数据 |
+| A 股实时 | Tencent → AkShare Sina → Efinance → AkShare EM | Tushare（可通过 `REALTIME_SOURCE_PRIORITY` 调序） | 使用历史收盘价分析 |
+| 港股日线 | AkShare → YFinance | Tushare `hk_daily`、Longbridge | 保留数据库已有历史数据 |
+| 港股实时 | AkShare HK | Longbridge（默认配置顺序中优先，未配置即跳过） | 使用历史收盘价分析 |
+
+正常 fallback 只记录来源、耗时和失败类型，不会输出密钥。分析上下文快照会记录 `market`、`quote_source`、`price_basis` 和 `captured_at`，可用于确认报告采用实时价还是历史收盘价。
 
 ### 东财接口频繁失败时的处理
 
@@ -994,13 +1008,16 @@ PUSHOVER_API_TOKEN=your_api_token
 
 ### 港股支持
 
-使用 `hk` 前缀指定港股代码：
+对外推荐使用 `HK` + 5 位数字，系统同时兼容 `.HK` 后缀和 5 位裸代码：
 
 ```bash
-STOCK_LIST=600519,hk00700,hk01810
+STOCK_LIST=600519,HK00700,HK01810
+python main.py --stocks 600519,00700.HK
 ```
 
-港股日线会跳过 efinance、pytdx、baostock 等不支持港股日线的数据源，避免把港股代码错配到非港股市场；默认改由 AkShare/Tushare/YFinance/Longbridge 等港股路径继续兜底。
+`HK00700`、`00700.HK`、`00700` 会统一为内部标识 `HK00700`；`600519.SH` 会统一为 `600519`。旧历史无需迁移，查询时仍按等价代码兼容。
+
+港股日线会跳过 efinance、pytdx、baostock 等不支持港股日线的数据源，避免把港股代码错配到非港股市场；由 AkShare/Tushare/YFinance/Longbridge 等港股路径继续兜底。港股技术分析使用 HKD、T+0、无日涨跌停语义，情报搜索优先覆盖港交所披露易及中英文财报与风险信息；港股无可靠筹码分布时会明确降级，不阻断报告生成。
 
 ### ETF 与指数分析
 
