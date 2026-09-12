@@ -381,7 +381,10 @@ class StockAnalysisPipeline:
                     trend_result = self.trend_analyzer.analyze(
                         df,
                         code,
-                        market_profile=get_trend_market_profile(code),
+                        market_profile=get_trend_market_profile(
+                            code,
+                            bias_threshold=getattr(self.config, "bias_threshold", None),
+                        ),
                     )
                     logger.info(f"{stock_name}({code}) 趋势分析: {trend_result.trend_status.value}, "
                               f"买入信号={trend_result.buy_signal.value}, 评分={trend_result.signal_score}")
@@ -577,7 +580,10 @@ class StockAnalysisPipeline:
         """
         enhanced = context.copy()
         enhanced["report_language"] = normalize_report_language(getattr(self.config, "report_language", "zh"))
-        market_profile = get_trend_market_profile(context.get("code", ""))
+        market_profile = get_trend_market_profile(
+            context.get("code", ""),
+            bias_threshold=getattr(self.config, "bias_threshold", None),
+        )
         enhanced["market"] = market_profile.market
         enhanced["currency"] = market_profile.currency
         enhanced["trading_rules"] = market_profile.trading_rules

@@ -90,7 +90,11 @@ class TrendMarketProfile:
     bias_threshold: float
 
 
-def get_trend_market_profile(code: str) -> TrendMarketProfile:
+def get_trend_market_profile(
+    code: str,
+    *,
+    bias_threshold: float | None = None,
+) -> TrendMarketProfile:
     market = detect_stock_market(code, default="cn") or "cn"
     semantics = {
         "cn": ("CNY", "T+1；存在涨跌停限制"),
@@ -102,7 +106,11 @@ def get_trend_market_profile(code: str) -> TrendMarketProfile:
         market=market,
         currency=currency,
         trading_rules=trading_rules,
-        bias_threshold=get_config().bias_threshold,
+        bias_threshold=(
+            float(bias_threshold)
+            if bias_threshold is not None
+            else get_config().bias_threshold
+        ),
     )
 
 
