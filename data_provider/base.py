@@ -114,6 +114,11 @@ def normalize_stock_code(stock_code: str) -> str:
         if suffix.upper() in ('SH', 'SZ', 'SS', 'BJ') and base.isdigit():
             return base
 
+    # A-shares use six digits; an unprefixed five-digit code is the
+    # documented shorthand for a Hong Kong listing.
+    if upper.isdigit() and len(upper) == 5:
+        return f"HK{upper}"
+
     return code
 
 

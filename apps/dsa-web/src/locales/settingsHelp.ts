@@ -146,6 +146,14 @@ const settingsHelpZhCN: SettingsHelpMap = {
     impact: ['影响现价、盘中分析和依赖实时价格的报告字段。'],
     notes: ['单一数据源失败应降级到后续数据源，不应拖垮主流程。'],
   },
+  'settings.data_source.HK_REALTIME_SOURCE_PRIORITY': {
+    title: '港股实时行情源优先级',
+    summary: '单独配置港股 Longbridge 与 AkShare 的尝试顺序。',
+    usage: '使用 longbridge、akshare_hk，以英文逗号分隔。',
+    valueNotes: ['未配置长桥凭据或连接冷却时会自动跳过 longbridge。'],
+    impact: ['影响港股现价来源和盘中技术分析，全部失败时使用历史收盘价。'],
+    notes: ['使用 akshare_hk,longbridge 可让免费源优先。'],
+  },
   'settings.data_source.realtime_quotes': {
     title: '实时行情配置',
     summary: '控制实时行情和盘中技术指标是否启用。',
@@ -554,6 +562,14 @@ const settingsHelpEnUS: SettingsHelpMap = {
     valueNotes: ['Earlier providers are preferred; failures fall back to later providers.'],
     impact: ['Affects current price, intraday analysis, and report fields that depend on realtime prices.'],
     notes: ['A single provider failure should fall back to the next source.'],
+  },
+  'settings.data_source.HK_REALTIME_SOURCE_PRIORITY': {
+    title: 'Hong Kong Realtime Source Priority',
+    summary: 'Configures the Longbridge and AkShare order for Hong Kong quotes.',
+    usage: 'Use longbridge and akshare_hk, separated by commas.',
+    valueNotes: ['Longbridge is skipped when credentials are absent or the connection is cooling down.'],
+    impact: ['Affects HK current prices and intraday analysis; all-source failure uses the historical close.'],
+    notes: ['Use akshare_hk,longbridge to prefer the free source.'],
   },
   'settings.data_source.realtime_quotes': {
     title: 'Realtime Quotes',
