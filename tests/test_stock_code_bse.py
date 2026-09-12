@@ -21,7 +21,12 @@ if "json_repair" not in sys.modules:
 
 # Core imports (should stay runnable even when optional data-source deps are absent)
 try:
-    from data_provider.base import is_bse_code, normalize_stock_code
+    from data_provider.base import (
+        canonical_stock_identity,
+        detect_stock_market,
+        is_bse_code,
+        normalize_stock_code,
+    )
     _BASE_IMPORTS_OK = True
     _BASE_IMPORT_ERROR = ""
 except ImportError as e:
@@ -107,6 +112,17 @@ class TestNormalizeStockCode(unittest.TestCase):
         """HK 前缀的短数字格式应补足到 5 位，便于后续缓存与去重。"""
         self.assertEqual(normalize_stock_code("hk1810"), "HK01810")
         self.assertEqual(normalize_stock_code("HK700"), "HK00700")
+
+    def test_canonical_identity_collapses_exchange_forms(self):
+        self.assertEqual(canonical_stock_identity("600519.SH"), "600519")
+        self.assertEqual(canonical_stock_identity("00700.HK"), "HK00700")
+        self.assertEqual(canonical_stock_identity("00700"), "HK00700")
+
+    def test_market_detection_uses_shared_contract(self):
+        self.assertEqual(detect_stock_market("600519.SH"), "cn")
+        self.assertEqual(detect_stock_market("00700.HK"), "hk")
+        self.assertEqual(detect_stock_market("AAPL"), "us")
+        self.assertIsNone(detect_stock_market("not-a-code", default=None))
 
 
 @unittest.skipIf(not _TUSHARE_IMPORTS_OK, f"tushare fetcher imports failed: {_TUSHARE_IMPORT_ERROR}")

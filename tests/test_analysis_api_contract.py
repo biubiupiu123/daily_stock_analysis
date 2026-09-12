@@ -1145,7 +1145,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         resolve_mock.assert_not_called()
         queue.submit_tasks_batch.assert_called_once_with(
-            stock_codes=["00700.HK"],
+            stock_codes=["HK00700"],
             stock_name="腾讯控股",
             original_query="00700",
             selection_source="autocomplete",
@@ -1181,7 +1181,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         resolve_mock.assert_not_called()
         queue.submit_tasks_batch.assert_called_once_with(
-            stock_codes=["920493.BJ"],
+            stock_codes=["920493"],
             stock_name="示例北交所股票",
             original_query="920493",
             selection_source="autocomplete",
@@ -1403,7 +1403,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             self.assertEqual(first.status_code, 202)
             self.assertEqual(second.status_code, 409)
             self.assertEqual(json.loads(second.body)["error"], "duplicate_task")
-            self.assertEqual(json.loads(second.body)["stock_code"], "600519.SH")
+            self.assertEqual(json.loads(second.body)["stock_code"], "600519")
             self.assertEqual(
                 json.loads(second.body)["existing_task_id"],
                 json.loads(first.body)["task_id"],

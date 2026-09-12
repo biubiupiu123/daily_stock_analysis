@@ -146,6 +146,30 @@ def _is_hk_market(code: str) -> bool:
     return False
 
 
+def is_hk_stock_code(code: str) -> bool:
+    """Public market-identity check for Hong Kong stock codes."""
+    return _is_hk_market(code)
+
+
+def detect_stock_market(code: str, *, default: Optional[str] = "cn") -> Optional[str]:
+    """Return the canonical market tag for a stock code.
+
+    ``default`` keeps legacy fail-open callers compatible. Pass ``None`` at
+    validation boundaries when an unrecognised code must stay unclassified.
+    """
+    normalized = (code or "").strip()
+    if not normalized:
+        return default
+    if _is_us_market(normalized):
+        return "us"
+    if _is_hk_market(normalized):
+        return "hk"
+    canonical = normalize_stock_code(normalized)
+    if canonical.isdigit() and len(canonical) == 6:
+        return "cn"
+    return default
+
+
 def _is_etf_code(code: str) -> bool:
     """判定 A 股 ETF 基金代码（保守规则）。"""
     normalized = normalize_stock_code(code)
@@ -187,11 +211,7 @@ def _is_meaningful_chip_distribution(chip: Any) -> bool:
 
 def _market_tag(code: str) -> str:
     """返回市场标签: cn/us/hk."""
-    if _is_us_market(code):
-        return "us"
-    if _is_hk_market(code):
-        return "hk"
-    return "cn"
+    return detect_stock_market(code, default="cn") or "cn"
 
 
 def is_bse_code(code: str) -> bool:
@@ -250,6 +270,15 @@ def canonical_stock_code(code: str) -> str:
         'hk00700' -> 'HK00700'
     """
     return (code or "").strip().upper()
+
+
+def canonical_stock_identity(code: str) -> str:
+    """Return the stable internal identity used for new tasks and records.
+
+    Exchange-decorated A-share codes are reduced to six digits while Hong
+    Kong codes use the unambiguous ``HK`` plus five-digit representation.
+    """
+    return canonical_stock_code(normalize_stock_code(code))
 
 
 class DataFetchError(Exception):

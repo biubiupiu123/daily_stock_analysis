@@ -26,7 +26,7 @@ from typing import Optional, Dict, List, Any, TYPE_CHECKING, Tuple, Literal, Cal
 if TYPE_CHECKING:
     from asyncio import Queue as AsyncQueue
 
-from data_provider.base import canonical_stock_code, normalize_stock_code
+from data_provider.base import canonical_stock_identity
 from src.utils.analysis_metadata import SELECTION_SOURCES
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ def _dedupe_stock_code_key(stock_code: str) -> str:
     The task queue should treat equivalent market code shapes as the same
     underlying stock, e.g. ``600519`` and ``600519.SH``.
     """
-    return canonical_stock_code(normalize_stock_code(stock_code))
+    return canonical_stock_identity(stock_code)
 
 
 class TaskStatus(str, Enum):
@@ -322,7 +322,7 @@ class AnalysisTaskQueue:
         Raises:
             DuplicateTaskError: Raised when the stock is already being analyzed
         """
-        stock_code = canonical_stock_code(stock_code)
+        stock_code = canonical_stock_identity(stock_code)
         if not stock_code:
             raise ValueError("股票代码不能为空或仅包含空白字符")
 
@@ -363,7 +363,7 @@ class AnalysisTaskQueue:
         created_task_ids: List[str] = []
 
         canonical_codes = [
-            normalized for normalized in (canonical_stock_code(code) for code in stock_codes)
+            normalized for normalized in (canonical_stock_identity(code) for code in stock_codes)
             if normalized
         ]
 

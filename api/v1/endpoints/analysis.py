@@ -51,7 +51,7 @@ from api.v1.schemas.history import (
     ReportStrategy,
     ReportDetails,
 )
-from data_provider.base import canonical_stock_code, normalize_stock_code
+from data_provider.base import canonical_stock_identity, normalize_stock_code
 from src.config import Config
 from src.core.market_review_lock import (
     MarketReviewExecutionLock as _MarketReviewExecutionLock,
@@ -178,14 +178,14 @@ def _resolve_and_normalize_input(raw_value: str) -> str:
         return ""
 
     if is_code_like(text):
-        return canonical_stock_code(text)
+        return canonical_stock_identity(text)
 
     if _is_obviously_invalid_analysis_input(text):
         raise _invalid_analysis_input_error()
 
     resolved = resolve_name_to_code(text)
     if resolved:
-        return canonical_stock_code(resolved)
+        return canonical_stock_identity(resolved)
 
     raise _invalid_analysis_input_error()
 

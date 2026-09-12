@@ -9,8 +9,9 @@ single market.
 Fixes: https://github.com/ZhuLinsen/daily_stock_analysis/issues/644
 """
 
-import re
 from typing import Optional
+
+from data_provider.base import detect_stock_market
 
 
 def detect_market(stock_code: Optional[str]) -> str:
@@ -19,28 +20,7 @@ def detect_market(stock_code: Optional[str]) -> str:
     Returns:
         One of 'cn', 'hk', 'us', or 'cn' as fallback.
     """
-    if not stock_code:
-        return "cn"
-
-    code = stock_code.strip().upper()
-
-    # HK stocks: HK00700, 00700.HK, or 5-digit pure numbers
-    if code.startswith("HK") or code.endswith(".HK"):
-        return "hk"
-    lower = code.lower()
-    if lower.endswith(".hk"):
-        return "hk"
-    # 5-digit pure numbers are HK (A-shares are 6-digit)
-    if code.isdigit() and len(code) == 5:
-        return "hk"
-
-    # US stocks: 1-5 uppercase letters (AAPL, TSLA, GOOGL)
-    # Also handles suffixed forms like BRK.B
-    if re.match(r'^[A-Z]{1,5}(\.[A-Z]{1,2})?$', code):
-        return "us"
-
-    # Default: A-shares (6-digit numbers like 600519, 000001)
-    return "cn"
+    return detect_stock_market(stock_code or "", default="cn") or "cn"
 
 
 # -- Market-specific role descriptions --

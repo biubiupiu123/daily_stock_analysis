@@ -2270,17 +2270,9 @@ class SearchService:
     @staticmethod
     def _is_foreign_stock(stock_code: str) -> bool:
         """判断是否为港股或美股"""
-        code = stock_code.strip()
-        # 美股：1-5个大写字母，可能包含点（如 BRK.B）
-        if SearchService._US_STOCK_RE.match(code):
-            return True
-        # 港股：带 hk 前缀或 5位纯数字
-        lower = code.lower()
-        if lower.startswith('hk'):
-            return True
-        if code.isdigit() and len(code) == 5:
-            return True
-        return False
+        from data_provider.base import detect_stock_market
+
+        return detect_stock_market(stock_code, default="cn") in {"hk", "us"}
 
     @classmethod
     def _contains_chinese_text(cls, value: Optional[str]) -> bool:

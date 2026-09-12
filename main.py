@@ -50,7 +50,7 @@ import time
 import uuid
 from datetime import datetime, timezone, timedelta
 
-from data_provider.base import canonical_stock_code
+from data_provider.base import canonical_stock_identity
 from src.webui_frontend import prepare_webui_frontend_assets
 from src.config import get_config, Config
 from src.logging_config import setup_logging
@@ -811,7 +811,7 @@ def main() -> int:
     # 解析股票列表（统一为大写 Issue #355）
     stock_codes = None
     if args.stocks:
-        stock_codes = [canonical_stock_code(c) for c in args.stocks.split(',') if (c or "").strip()]
+        stock_codes = [canonical_stock_identity(c) for c in args.stocks.split(',') if (c or "").strip()]
         logger.info(f"使用命令行指定的股票列表: {stock_codes}")
 
     # === 处理 --webui / --webui-only 参数，映射到 --serve / --serve-only ===
